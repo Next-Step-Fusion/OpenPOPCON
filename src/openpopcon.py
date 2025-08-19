@@ -21,12 +21,12 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import yaml
 import json
-from .lib.openpopcon_util import *
+from lib.openpopcon_util import *
 import numba as nb
-from .lib import phys_lib as phys
+from lib import phys_lib as phys
 import shutil
 import datetime
-from .lib import neat_json_encoder as nj
+from lib import neat_json_encoder as nj
 
 DEFAULT_PLOTSETTINGS = get_POPCON_homedir(['resources','default_plotsettings.yml'])
 DEFAULT_SCALINGLAWS = get_POPCON_homedir(['resources','scalinglaws.yml'])
@@ -290,7 +290,7 @@ class POPCON_algorithms:
     # Profiles and integration
     #-------------------------------------------------------------------
 
-    def get_profile(self, rho:npt.NDArray[np.float_], profid:int) -> npt.NDArray[np.float_]:
+    def get_profile(self, rho:npt.NDArray[np.float64], profid:int) -> npt.NDArray[np.float64]:
         """
         Returns the profile for a given profile ID at a given rho.
         Allows for easy interpolation at runtime and avoids implementing
@@ -548,7 +548,7 @@ class POPCON_algorithms:
     # Power profiles
     #-------------------------------------------------------------------
 
-    def _W_tot_prof(self, rho:npt.NDArray[np.float_], T_i_keV:float, n_e_20:float):
+    def _W_tot_prof(self, rho:npt.NDArray[np.float64], T_i_keV:float, n_e_20:float):
         """
         Plasma energy per cubic meter; also pressure.
         """
@@ -561,7 +561,7 @@ class POPCON_algorithms:
         # = 3/2 * (n_i_r) ( 1.60218e-22 * T_i_r (keV) ) (MJ/m^3)
         return 3/2 * 1.60218e-22 * (n_i_r * T_i_r + n_e_r * T_e_r)
     
-    def _P_DDpT_prof(self, rho:npt.NDArray[np.float_], T_i_keV:float, n_i_20:float):
+    def _P_DDpT_prof(self, rho:npt.NDArray[np.float64], T_i_keV:float, n_i_20:float):
         """
         D(d,p)T power per cubic meter
         """
@@ -583,7 +583,7 @@ class POPCON_algorithms:
         f_ddpt = np.power( ( dfrac*n_i_r / (np.sqrt(2)) ), 2) * phys.get_reactivity(T_i_r,2) * 1e-6
         return 1.60218e-22 * f_ddpt * (1.01e3 + 3.02e3)
     
-    def _P_DDnHe3_prof(self, rho:npt.NDArray[np.float_], T_i_keV:float, n_i_20:float):
+    def _P_DDnHe3_prof(self, rho:npt.NDArray[np.float64], T_i_keV:float, n_i_20:float):
         """
         D(d,n)He3 power per cubic meter
         """
@@ -604,7 +604,7 @@ class POPCON_algorithms:
         f_ddnhe3 = np.power( (  dfrac*n_i_r / (np.sqrt(2)) ), 2) * phys.get_reactivity(T_i_r,3) * 1e-6
         return 1.60218e-22 * f_ddnhe3 * (2.45e3 + 0.82e3)
     
-    def _P_DTnHe4_prof(self, rho:npt.NDArray[np.float_], T_i_keV:float, n_i_20:float):
+    def _P_DTnHe4_prof(self, rho:npt.NDArray[np.float64], T_i_keV:float, n_i_20:float):
         """
         T(d,n)He4 power density in MW/m^3
         """
@@ -626,8 +626,8 @@ class POPCON_algorithms:
 
         f_dtnhe4 = dfrac*(n_i_r) * tfrac*(n_i_r) * phys.get_reactivity(T_i_r,1) * 1e-6
         return 1.60218e-22 * f_dtnhe4 * (3.52e3 + 14.06e3)
-    
-    def _P_fusion_heating(self, rho:npt.NDArray[np.float_], T_i_keV:float, n_i_20:float):
+
+    def _P_fusion_heating(self, rho:npt.NDArray[np.float64], T_i_keV:float, n_i_20:float):
         """
         D-D and D-T heating power density in MW/m^3
         """
@@ -635,7 +635,7 @@ class POPCON_algorithms:
               self._P_DDnHe3_prof(rho,T_i_keV,n_i_20)*(0.82e3/(2.45e3+0.82e3))+\
               self._P_DTnHe4_prof(rho,T_i_keV,n_i_20)*(3.52e3/(3.52e3+14.06e3))
     
-    def _P_fusion(self, rho:npt.NDArray[np.float_], T_i_keV:float, n_i_20:float):
+    def _P_fusion(self, rho:npt.NDArray[np.float64], T_i_keV:float, n_i_20:float):
         """
         Fusion power density in MW/m^3
         """
@@ -643,7 +643,7 @@ class POPCON_algorithms:
                 self._P_DDnHe3_prof(rho,T_i_keV,n_i_20)+\
                 self._P_DTnHe4_prof(rho,T_i_keV,n_i_20)
     
-    def _P_brem_rad(self, rho:npt.NDArray[np.float_], T_e_keV:float, n_e_20:float):
+    def _P_brem_rad(self, rho:npt.NDArray[np.float64], T_e_keV:float, n_e_20:float):
         """
         Radiative power density in MW/m^3; See formulary.
         """
@@ -660,7 +660,7 @@ class POPCON_algorithms:
         P_brem = G*1e-6*np.sqrt(1000*T_e_r)*total_Zeff*(n_e_r/7.69e18)**2
         return P_brem
     
-    def _P_synch(self, rho:npt.NDArray[np.float_], T_e_keV:float, n_e_20:float):
+    def _P_synch(self, rho:npt.NDArray[np.float64], T_e_keV:float, n_e_20:float):
         """
         Synchrotron radiation power density in MW/m^3; see Zohm 2019.
         """
@@ -670,7 +670,7 @@ class POPCON_algorithms:
 
         return P_synch
     
-    def _P_impurity_rad(self, rho:npt.NDArray[np.float_], T_e_keV:float, n_e_20:float):
+    def _P_impurity_rad(self, rho:npt.NDArray[np.float64], T_e_keV:float, n_e_20:float):
         """
         Radiative power density from impurities in MW/m^3; see Zohm 2019.
         """
@@ -684,13 +684,13 @@ class POPCON_algorithms:
         P_line = np.sum(1e-6*(Lz.T*(n_e_r)**2).T*self.impurityfractions,axis=1)
         return P_line
     
-    def _P_rad(self, rho:npt.NDArray[np.float_], T_e_keV:float, n_e_20:float):
+    def _P_rad(self, rho:npt.NDArray[np.float64], T_e_keV:float, n_e_20:float):
         """
         Total radiative power density in MW/m^3.
         """
         return self._P_brem_rad(rho, T_e_keV, n_e_20) + self._P_impurity_rad(rho, T_e_keV, n_e_20) + self._P_synch(rho, T_e_keV, n_e_20)
     
-    def _P_OH_prof(self, rho:npt.NDArray[np.float_], T_e_keV:float, n_e_20:float) -> npt.NDArray[np.float_]:
+    def _P_OH_prof(self, rho:npt.NDArray[np.float64], T_e_keV:float, n_e_20:float) -> npt.NDArray[np.float64]:
         """
         Ohmic power density in MW/m^3
         """
@@ -1463,7 +1463,7 @@ betaN = {betaN:.3f}
     # Plotting
     #-------------------------------------------------------------------
 
-    def plot(self, show:bool=True, savefig:str='', names=None):
+    def plot(self, show:bool=True, savefig:str='', names=None, Ti_av:float=None, f_Gw:float=None):
         """
         Plots the output data. If variable names is specified, only
         plots those variables. Otherwise, refers to the plotsettings
@@ -1562,6 +1562,12 @@ betaN = {betaN:.3f}
         infoboxtext = f"$I_p$ = {p.Ip:.2f}\n$B_0$ = {p.B0:.2f}\nR = {p.R:.2f}\na = {p.a:.2f}\n$\\kappa$ = {p.kappa:.2f}\n$\\delta$ = {p.delta:.2f}\n$M_i$ = {p.M_i:.2f}\nti/te = {p.tipeak_over_tepeak:.2f}\nfuel = {fueldict[p.fuel]}\n<Zeff>={p.Zeff(np.average(xx)):.2f}"
         ax.text(x=np.max(xx)+(np.max(xx)-np.min(xx))/64,y=np.min(yy),s=infoboxtext, bbox=dict(boxstyle="round", fc="w", ec="0.5", alpha=0.8))
         fig.tight_layout()
+
+        if Ti_av is not None:
+            ax.axvline(x=Ti_av, color='black', linestyle='-.')
+        if f_Gw is not None:
+            ax.axhline(y=f_Gw, color='black', linestyle='-.')
+            
         if savefig != '':
             plt.savefig(savefig)
         if show:
