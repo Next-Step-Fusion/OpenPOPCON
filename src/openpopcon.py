@@ -951,20 +951,28 @@ class POPCON_settings:
     settings file. When applicable, sets to the default value.
     """
     def __init__(self,
-                 filename: str,
+                 filename: str, 
+                 data: dict=None,
                  ) -> None:
-        self.read(filename)
+        if data is not None:
+            self.read(filename, input_data=data)
+        else:
+            self.read(filename, input_data=None)
+
         pass
 
-    def read(self, filename: str) -> None:
+    def read(self, filename: str, input_data: dict=None,) -> None:
         """
         Reads a YAML file and sets the settings.
         """
-        if filename.endswith('.yaml') or filename.endswith('.yml'):
-            with open(filename, 'r') as f:
-                data = yaml.safe_load(f)
+        if input_data is not None:
+            data = input_data
         else:
-            raise ValueError('Filename must end with .yaml or .yml')
+            if filename.endswith('.yaml') or filename.endswith('.yml'):
+                with open(filename, 'r') as f:
+                    data = yaml.safe_load(f)
+            else:
+                raise ValueError('Filename must end with .yaml or .yml or provide direct input dictionary in data')
 
         try:
             #-----------------------------------------------------------
@@ -1192,15 +1200,17 @@ class POPCON:
 
     """
 
-    def __init__(self, settingsfile = None, plotsettingsfile = None, scalinglawfile = None) -> None:
+    def __init__(self, settingsfile = None, input_settings: dict = None, plotsettingsfile = None, scalinglawfile = None) -> None:
         self.algorithms: POPCON_algorithms
         self.settings: POPCON_settings
         self.plotsettings: POPCON_plotsettings
         self.output: POPCON_data
 
-        if settingsfile is not None:
-            self.settings = POPCON_settings(settingsfile)
+        if (settingsfile is not None) and (input_settings is None):
+            self.settings = POPCON_settings(settingsfile, data=None)
             self.settingsfile = settingsfile
+        elif input_settings is not None:
+            self.settings = POPCON_settings(settingsfile, data=input_settings)
         else:
             pass
 
@@ -1458,6 +1468,61 @@ betaN = {betaN:.3f}
             if show:
                 plt.show()
         pass
+    
+    def get_point(self, n_G_frac:float, Ti_av:float) -> None:
+        """
+        Solves power balance at a single n, T point. Prints the results
+        plots the profiles of the solution if plot=True.
+        """
+        
+        try: self.algorithms
+        except AttributeError:
+            self.run_POPCON(setuponly=True)
+
+        n_G = self.algorithms.n_GR
+        rho = self.algorithms.sqrtpsin
+        n_e_avg_fac = self.algorithms.volume_integral(rho, self.algorithms.get_profile(rho, 1))/self.algorithms.V
+        n_e_20 = n_G_frac*n_G/n_e_avg_fac
+        T_i_avg_fac = self.algorithms.volume_integral(rho, self.algorithms.get_profile(rho, 3))/self.algorithms.V
+        n_i_avg_fac = self.algorithms.volume_integral(rho, self.algorithms.get_profile(rho, 2))/self.algorithms.V
+        T_i_keV = Ti_av/T_i_avg_fac
+        T_e_keV = T_i_keV/self.algorithms.tipeak_over_tepeak
+        dil = self.algorithms.plasma_dilution(T_e_keV)
+        n_i_20 = n_e_20*dil
+        line_avg_fac = np.average(self.algorithms.get_profile(rho, 1))
+
+        Paux = self.algorithms.P_aux_relax_impfrac(n_e_20,T_i_keV,self.settings.accel,self.settings.err,self.settings.maxit)
+        
+        Pfusion = self.algorithms.volume_integral(rho,self.algorithms._P_fusion(rho, T_i_keV, n_i_20))
+        Pfusion_heating = self.algorithms.volume_integral(rho,self.algorithms._P_fusion_heating(rho, T_i_keV, n_i_20))
+        Pohmic = self.algorithms.volume_integral(rho,self.algorithms._P_OH_prof(rho, T_e_keV, n_e_20))
+        Pbrems = self.algorithms.volume_integral(rho,self.algorithms._P_brem_rad(rho, T_e_keV, n_e_20))
+        Psynch = self.algorithms.volume_integral(rho,self.algorithms._P_synch(rho, T_e_keV, n_e_20))
+        Pimprad = self.algorithms.volume_integral(rho,self.algorithms._P_impurity_rad(rho, T_e_keV, n_e_20))
+        Prad = self.algorithms.volume_integral(rho,self.algorithms._P_rad(rho, T_e_keV, n_e_20))
+        Pheat = Pfusion_heating + Pohmic + Paux - Pbrems
+        Palpha = self.algorithms.volume_integral(rho,self.algorithms._P_DTnHe4_prof(rho, T_i_keV, n_i_20))*3.52e3/(3.52e3 + 14.06e3)
+        Pdd = self.algorithms.volume_integral(rho,self.algorithms._P_DDnHe3_prof(rho, T_i_keV, n_i_20))
+        Pdd += self.algorithms.volume_integral(rho,self.algorithms._P_DDpT_prof(rho, T_i_keV, n_i_20))
+        Pdt = self.algorithms.volume_integral(rho,self.algorithms._P_DTnHe4_prof(rho, T_i_keV, n_i_20))
+        tauE = self.algorithms.tauE_scalinglaw(Pheat, n_e_20*line_avg_fac)
+        Wtot = self.algorithms.volume_integral(rho,self.algorithms._W_tot_prof(rho,T_i_keV,n_e_20))
+        Pconf = Wtot/tauE
+        Ploss = Pconf + Psynch + Pbrems
+        f_rad = Prad/Ploss
+        Q = self.algorithms.Q_fusion(T_i_keV, n_e_20, Paux)
+        H89 = tauE/self.algorithms.tauE_H89(Pheat,n_e_20*line_avg_fac)
+        H98 = tauE/self.algorithms.tauE_H98(Pheat,n_e_20*line_avg_fac)
+        vloop = self.algorithms.Vloop(T_e_keV, n_e_20)
+        betaN = 100*self.algorithms.BetaN(T_i_keV, n_e_20) # in percent
+        
+        data = {
+            "Paux": Paux,
+            "Pfusion": Pfusion,
+            "Q": Q,
+            "betaN": betaN
+        }
+        return data
 
     #-------------------------------------------------------------------
     # Plotting
@@ -1567,7 +1632,7 @@ betaN = {betaN:.3f}
             ax.axvline(x=Ti_av, color='black', linestyle='-.')
         if f_Gw is not None:
             ax.axhline(y=f_Gw, color='black', linestyle='-.')
-            
+
         if savefig != '':
             plt.savefig(savefig)
         if show:
